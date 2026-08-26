@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+  name="viewport"
+  content="width=device-width, initial-scale=1.0"
+>
+
+<title>ESP32 Controller</title>
+
+<style>
+
+body {
+    font-family: Arial, sans-serif;
+    background: #111;
+    color: white;
+    text-align: center;
+    margin: 0;
+    padding: 30px;
+}
+
+h1 {
+    margin-bottom: 10px;
+}
+
+#status {
+    margin: 20px;
+    font-size: 20px;
+}
+
+button {
+    width: 250px;
+    height: 90px;
+    margin: 12px;
+
+    border: none;
+    border-radius: 18px;
+
+    font-size: 28px;
+    font-weight: bold;
+
+    cursor: pointer;
+}
+
+.connect {
+    background: #2196F3;
+    color: white;
+}
+
+.on {
+    background: #4CAF50;
+    color: white;
+}
+
+.off {
+    background: #f44336;
+    color: white;
+}
+
+button:disabled {
+    opacity: 0.3;
+}
+
+</style>
+
+</head>
+
+
+<body>
+
+<h1>Device Controller</h1>
+
+<div id="status">
+    🔴 Disconnected
+</div>
+
+
+<button
+    class="connect"
+    onclick="connectBLE()"
+>
+    Connect
+</button>
+
+<br>
+
+<button
+    id="onButton"
+    class="on"
+    onclick="sendCommand(1)"
+    disabled
+>
+    ON
+</button>
+
+<br>
+
+<button
+    id="offButton"
+    class="off"
+    onclick="sendCommand(0)"
+    disabled
+>
+    OFF
+</button>
+
+
+<script>
+
+
+const SERVICE_UUID =
+    "12345678-1234-1234-1234-123456789000";
+
+const CONTROL_UUID =
+    "12345678-1234-1234-1234-123456789001";
+
+
+let device = null;
+
+let controlCharacteristic = null;
+
+
+
+// -----------------------------
+// Connect to ESP32
+// -----------------------------
+
+async function connectBLE() {
+
+    try {
+
+        document.getElementById("status").innerHTML =
+            "🟡 Searching...";
+
+
+        device =
+            await navigator.bluetooth.requestDevice({
+
+                filters: [
+                    {
+                        services: [SERVICE_UUID]
+                    }
+                ]
+
+            });
+
+
+        device.addEventListener(
+            "gattserverdisconnected",
+            disconnected
+        );
+
+
+        document.getElementById("status").innerHTML =
+            "🟡 Connecting...";
+
+
+        const server =
+            await device.gatt.connect();
+
+
+        const service =
+            await server.getPrimaryService(
+                SERVICE_UUID
+            );
+
+
+        controlCharacteristic =
+            await service.getCharacteristic(
+                CONTROL_UUID
+            );
+
+
+        document.getElementById("status").innerHTML =
+            "🟢 Connected to " + device.name;
+
+
+        document.getElementById(
+            "onButton"
+        ).disabled = false;
+
+
+        document.getElementById(
+            "offButton"
+        ).disabled = false;
+
+
+    }
+
+    catch(error) {
+
+        console.error(error);
+
+        document.getElementById("status").innerHTML =
+            "🔴 Connection failed";
+
+    }
+}
+
+
+
+// -----------------------------
+// Send command
+// -----------------------------
+
+async function sendCommand(command) {
+
+    if (!controlCharacteristic) {
+
+        alert("Not connected");
+
+        return;
+    }
+
+
+    try {
+
+        const data =
+            new Uint8Array([command]);
+
+
+        await controlCharacteristic
+            .writeValueWithResponse(data);
+
+
+        console.log(
+            "Sent:",
+            command
+        );
+
+    }
+
+    catch(error) {
+
+        console.error(
+            "Write failed:",
+            error
+        );
+
+    }
+
+}
+
+
+
+// -----------------------------
+// Disconnect event
+// -----------------------------
+
+function disconnected() {
+
+    controlCharacteristic = null;
+
+
+    document.getElementById("status").innerHTML =
+        "🔴 Disconnected";
+
+
+    document.getElementById(
+        "onButton"
+    ).disabled = true;
+
+
+    document.getElementById(
+        "offButton"
+    ).disabled = true;
+
+}
+
+
+</script>
+
+
+</body>
+
+</html>
