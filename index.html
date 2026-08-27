@@ -1,280 +1,444 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
+    <meta charset="UTF-8">
 
-<meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    >
 
-<meta
-  name="viewport"
-  content="width=device-width, initial-scale=1.0"
->
+    <title>ESP32 Controller</title>
 
-<title>ESP32 Controller</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
 
-<style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
 
-body {
-    font-family: Arial, sans-serif;
-    background: #111;
-    color: white;
-    text-align: center;
-    margin: 0;
-    padding: 30px;
-}
+            width: 100%;
+            height: 100%;
 
-h1 {
-    margin-bottom: 10px;
-}
+            overflow: hidden;
+            overscroll-behavior: none;
 
-#status {
-    margin: 20px;
-    font-size: 20px;
-}
+            user-select: none;
+            -webkit-user-select: none;
 
-button {
-    width: 250px;
-    height: 90px;
-    margin: 12px;
+            -webkit-touch-callout: none;
+        }
 
-    border: none;
-    border-radius: 18px;
+        body {
+            position: fixed;
+            inset: 0;
 
-    font-size: 28px;
-    font-weight: bold;
+            width: 100vw;
+            height: 100dvh;
 
-    cursor: pointer;
-}
+            background: #111;
+            color: white;
 
-.connect {
-    background: #2196F3;
-    color: white;
-}
+            font-family: Arial, sans-serif;
 
-.on {
-    background: #4CAF50;
-    color: white;
-}
+            display: flex;
+            justify-content: center;
+            align-items: center;
 
-.off {
-    background: #f44336;
-    color: white;
-}
+            touch-action: none;
+        }
 
-button:disabled {
-    opacity: 0.3;
-}
+        .app {
+            width: 100%;
+            height: 100%;
 
-</style>
+            max-width: 500px;
 
+            display: flex;
+            flex-direction: column;
+
+            justify-content: center;
+            align-items: center;
+
+            padding: 20px;
+        }
+
+        h1 {
+            margin: 0 0 8px 0;
+
+            font-size: clamp(24px, 7vw, 34px);
+            text-align: center;
+        }
+
+        #status {
+            margin-bottom: 18px;
+
+            font-size: clamp(16px, 4.5vw, 21px);
+            text-align: center;
+        }
+
+        .controls {
+            width: 100%;
+
+            display: flex;
+            flex-direction: column;
+
+            gap: 14px;
+        }
+
+        button {
+            width: 100%;
+
+            height: clamp(65px, 13dvh, 95px);
+
+            border: none;
+            border-radius: 18px;
+
+            font-size: clamp(24px, 7vw, 32px);
+            font-weight: bold;
+
+            cursor: pointer;
+
+            touch-action: manipulation;
+
+            user-select: none;
+            -webkit-user-select: none;
+
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        button:active {
+            transform: scale(0.97);
+        }
+
+        button:disabled {
+            opacity: 0.3;
+        }
+
+        .connect {
+            background: #2196F3;
+            color: white;
+        }
+
+        .on {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .off {
+            background: #f44336;
+            color: white;
+        }
+    </style>
 </head>
 
 
 <body>
 
-<h1>Device Controller</h1>
+<div class="app">
 
-<div id="status">
-    🔴 Disconnected
+    <h1>Device Controller</h1>
+
+    <div id="status">
+        🔴 Disconnected
+    </div>
+
+
+    <div class="controls">
+
+        <button
+            id="connectButton"
+            class="connect"
+            onclick="connectBLE()"
+        >
+            Connect
+        </button>
+
+
+        <button
+            id="onButton"
+            class="on"
+            onclick="sendCommand(1)"
+            disabled
+        >
+            ON
+        </button>
+
+
+        <button
+            id="offButton"
+            class="off"
+            onclick="sendCommand(0)"
+            disabled
+        >
+            OFF
+        </button>
+
+    </div>
+
 </div>
-
-
-<button
-    class="connect"
-    onclick="connectBLE()"
->
-    Connect
-</button>
-
-<br>
-
-<button
-    id="onButton"
-    class="on"
-    onclick="sendCommand(1)"
-    disabled
->
-    ON
-</button>
-
-<br>
-
-<button
-    id="offButton"
-    class="off"
-    onclick="sendCommand(0)"
-    disabled
->
-    OFF
-</button>
 
 
 <script>
 
+    // -------------------------------------
+    // BLE UUIDs
+    // Must match ESP32 code
+    // -------------------------------------
 
-const SERVICE_UUID =
-    "12345678-1234-1234-1234-123456789000";
+    const SERVICE_UUID =
+        "12345678-1234-1234-1234-123456789000";
 
-const CONTROL_UUID =
-    "12345678-1234-1234-1234-123456789001";
-
-
-let device = null;
-
-let controlCharacteristic = null;
-
+    const CONTROL_UUID =
+        "12345678-1234-1234-1234-123456789001";
 
 
-// -----------------------------
-// Connect to ESP32
-// -----------------------------
-
-async function connectBLE() {
-
-    try {
-
-        document.getElementById("status").innerHTML =
-            "🟡 Searching...";
+    let device = null;
+    let controlCharacteristic = null;
 
 
-        device =
-            await navigator.bluetooth.requestDevice({
 
-                filters: [
-                    {
-                        services: [SERVICE_UUID]
-                    }
-                ]
+    // -------------------------------------
+    // Connect to ESP32
+    // -------------------------------------
 
-            });
+    async function connectBLE() {
+
+        const status =
+            document.getElementById("status");
+
+        const connectButton =
+            document.getElementById("connectButton");
 
 
-        device.addEventListener(
-            "gattserverdisconnected",
-            disconnected
+        // Check browser support
+        if (!navigator.bluetooth) {
+
+            status.innerHTML =
+                "❌ Web Bluetooth not supported";
+
+            return;
+        }
+
+
+        try {
+
+            status.innerHTML =
+                "🟡 Searching...";
+
+
+            // Open Bluetooth picker
+            device =
+                await navigator.bluetooth.requestDevice({
+
+                    filters: [
+                        {
+                            services: [
+                                SERVICE_UUID
+                            ]
+                        }
+                    ]
+
+                });
+
+
+            // Listen for disconnect
+            device.addEventListener(
+                "gattserverdisconnected",
+                handleDisconnect
+            );
+
+
+            status.innerHTML =
+                "🟡 Connecting...";
+
+
+            // Connect to ESP32
+            const server =
+                await device.gatt.connect();
+
+
+            // Get BLE service
+            const service =
+                await server.getPrimaryService(
+                    SERVICE_UUID
+                );
+
+
+            // Get control characteristic
+            controlCharacteristic =
+                await service.getCharacteristic(
+                    CONTROL_UUID
+                );
+
+
+            // Connected
+            status.innerHTML =
+                "🟢 Connected";
+
+
+            connectButton.innerHTML =
+                "Connected";
+
+
+            connectButton.disabled =
+                true;
+
+
+            document.getElementById(
+                "onButton"
+            ).disabled = false;
+
+
+            document.getElementById(
+                "offButton"
+            ).disabled = false;
+
+
+        }
+
+        catch(error) {
+
+            console.error(error);
+
+
+            status.innerHTML =
+                "🔴 Connection Failed";
+
+
+            console.log(
+                error.name,
+                error.message
+            );
+
+        }
+
+    }
+
+
+
+    // -------------------------------------
+    // Send BLE command
+    // -------------------------------------
+
+    async function sendCommand(command) {
+
+        if (!controlCharacteristic) {
+
+            console.log(
+                "Not connected"
+            );
+
+            return;
+        }
+
+
+        try {
+
+            const data =
+                new Uint8Array([
+                    command
+                ]);
+
+
+            await controlCharacteristic
+                .writeValueWithResponse(
+                    data
+                );
+
+
+            console.log(
+                "Sent command:",
+                command
+            );
+
+
+        }
+
+        catch(error) {
+
+            console.error(
+                "BLE write error:",
+                error
+            );
+
+        }
+
+    }
+
+
+
+    // -------------------------------------
+    // Handle Bluetooth disconnect
+    // -------------------------------------
+
+    function handleDisconnect() {
+
+        console.log(
+            "Bluetooth disconnected"
         );
 
 
-        document.getElementById("status").innerHTML =
-            "🟡 Connecting...";
-
-
-        const server =
-            await device.gatt.connect();
-
-
-        const service =
-            await server.getPrimaryService(
-                SERVICE_UUID
-            );
-
-
         controlCharacteristic =
-            await service.getCharacteristic(
-                CONTROL_UUID
+            null;
+
+
+        document.getElementById(
+            "status"
+        ).innerHTML =
+            "🔴 Disconnected";
+
+
+        const connectButton =
+            document.getElementById(
+                "connectButton"
             );
 
 
-        document.getElementById("status").innerHTML =
-            "🟢 Connected to " + device.name;
+        connectButton.innerHTML =
+            "Connect";
+
+
+        connectButton.disabled =
+            false;
 
 
         document.getElementById(
             "onButton"
-        ).disabled = false;
+        ).disabled =
+            true;
 
 
         document.getElementById(
             "offButton"
-        ).disabled = false;
-
-
-    }
-
-    catch(error) {
-
-        console.error(error);
-
-        document.getElementById("status").innerHTML =
-            "🔴 Connection failed";
-
-    }
-}
-
-
-
-// -----------------------------
-// Send command
-// -----------------------------
-
-async function sendCommand(command) {
-
-    if (!controlCharacteristic) {
-
-        alert("Not connected");
-
-        return;
-    }
-
-
-    try {
-
-        const data =
-            new Uint8Array([command]);
-
-
-        await controlCharacteristic
-            .writeValueWithResponse(data);
-
-
-        console.log(
-            "Sent:",
-            command
-        );
+        ).disabled =
+            true;
 
     }
 
-    catch(error) {
-
-        console.error(
-            "Write failed:",
-            error
-        );
-
-    }
-
-}
 
 
+    // -------------------------------------
+    // Prevent browser scrolling/dragging
+    // -------------------------------------
 
-// -----------------------------
-// Disconnect event
-// -----------------------------
+    document.addEventListener(
+        "touchmove",
+        function(event) {
 
-function disconnected() {
+            event.preventDefault();
 
-    controlCharacteristic = null;
-
-
-    document.getElementById("status").innerHTML =
-        "🔴 Disconnected";
-
-
-    document.getElementById(
-        "onButton"
-    ).disabled = true;
-
-
-    document.getElementById(
-        "offButton"
-    ).disabled = true;
-
-}
+        },
+        {
+            passive: false
+        }
+    );
 
 
 </script>
 
-
 </body>
-
 </html>
