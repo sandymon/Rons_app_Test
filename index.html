@@ -1,16 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
 
     <meta
         name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        content="width=device-width,
+                 initial-scale=1.0,
+                 maximum-scale=1.0,
+                 user-scalable=no,
+                 viewport-fit=cover"
     >
 
-    <title>ESP32 Controller</title>
+    <meta name="theme-color" content="#111111">
+
+    <title>Mic Controller</title>
 
     <style>
+
         * {
             box-sizing: border-box;
         }
@@ -30,6 +38,7 @@
             -webkit-user-select: none;
 
             -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         body {
@@ -42,11 +51,10 @@
             background: #111;
             color: white;
 
-            font-family: Arial, sans-serif;
-
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
 
             touch-action: none;
         }
@@ -55,59 +63,95 @@
             width: 100%;
             height: 100%;
 
-            max-width: 500px;
-
             display: flex;
             flex-direction: column;
 
-            justify-content: center;
-            align-items: center;
+            padding:
+                max(18px, env(safe-area-inset-top))
+                20px
+                max(18px, env(safe-area-inset-bottom))
+                20px;
+        }
 
-            padding: 20px;
+        .header {
+            text-align: center;
+            flex-shrink: 0;
         }
 
         h1 {
-            margin: 0 0 8px 0;
+            margin: 0;
 
-            font-size: clamp(24px, 7vw, 34px);
-            text-align: center;
+            font-size: clamp(
+                24px,
+                7vw,
+                34px
+            );
         }
 
         #status {
-            margin-bottom: 18px;
+            margin-top: 8px;
 
-            font-size: clamp(16px, 4.5vw, 21px);
-            text-align: center;
+            font-size: clamp(
+                16px,
+                4.5vw,
+                20px
+            );
+
+            font-weight: bold;
+        }
+
+        #volumeDisplay {
+            margin-top: 8px;
+
+            font-size: clamp(
+                15px,
+                4vw,
+                18px
+            );
+
+            opacity: 0.8;
         }
 
         .controls {
-            width: 100%;
+            flex: 1;
 
-            display: flex;
-            flex-direction: column;
+            display: grid;
+
+            grid-template-rows:
+                0.7fr
+                1fr
+                1fr
+                1fr;
 
             gap: 14px;
+
+            padding-top: 18px;
+
+            min-height: 0;
         }
 
         button {
             width: 100%;
+            height: 100%;
 
-            height: clamp(65px, 13dvh, 95px);
+            min-height: 0;
 
             border: none;
-            border-radius: 18px;
+            border-radius: 22px;
 
-            font-size: clamp(24px, 7vw, 32px);
-            font-weight: bold;
+            font-size: clamp(
+                24px,
+                7vw,
+                34px
+            );
 
-            cursor: pointer;
+            font-weight: 700;
+
+            color: white;
 
             touch-action: manipulation;
 
-            user-select: none;
-            -webkit-user-select: none;
-
-            -webkit-tap-highlight-color: transparent;
+            cursor: pointer;
         }
 
         button:active {
@@ -115,23 +159,29 @@
         }
 
         button:disabled {
-            opacity: 0.3;
+            opacity: 0.35;
         }
 
-        .connect {
-            background: #2196F3;
-            color: white;
+        #connectButton {
+            background: #1976d2;
         }
 
-        .on {
-            background: #4CAF50;
-            color: white;
+        #volumeUpButton {
+            background: #2e7d32;
         }
 
-        .off {
-            background: #f44336;
-            color: white;
+        #volumeDownButton {
+            background: #1565c0;
         }
+
+        #muteButton {
+            background: #c62828;
+        }
+
+        #muteButton.muted {
+            background: #616161;
+        }
+
     </style>
 </head>
 
@@ -140,10 +190,20 @@
 
 <div class="app">
 
-    <h1>Device Controller</h1>
+    <div class="header">
 
-    <div id="status">
-        🔴 Disconnected
+        <h1>
+            Mic Controller
+        </h1>
+
+        <div id="status">
+            🔴 Disconnected
+        </div>
+
+        <div id="volumeDisplay">
+            Volume Control Ready
+        </div>
+
     </div>
 
 
@@ -151,30 +211,36 @@
 
         <button
             id="connectButton"
-            class="connect"
             onclick="connectBLE()"
         >
-            Connect
+            CONNECT
         </button>
 
 
         <button
-            id="onButton"
-            class="on"
+            id="volumeUpButton"
             onclick="sendCommand(1)"
             disabled
         >
-            ON
+            VOLUME +
         </button>
 
 
         <button
-            id="offButton"
-            class="off"
-            onclick="sendCommand(0)"
+            id="volumeDownButton"
+            onclick="sendCommand(2)"
             disabled
         >
-            OFF
+            VOLUME −
+        </button>
+
+
+        <button
+            id="muteButton"
+            onclick="toggleMute()"
+            disabled
+        >
+            MUTE
         </button>
 
     </div>
@@ -184,10 +250,11 @@
 
 <script>
 
-    // -------------------------------------
+    // ==================================================
     // BLE UUIDs
-    // Must match ESP32 code
-    // -------------------------------------
+    //
+    // These MUST match the ESP32 code.
+    // ==================================================
 
     const SERVICE_UUID =
         "12345678-1234-1234-1234-123456789000";
@@ -196,29 +263,67 @@
         "12345678-1234-1234-1234-123456789001";
 
 
+    // ==================================================
+    // BLE objects
+    // ==================================================
+
     let device = null;
+
+    let server = null;
+
     let controlCharacteristic = null;
 
+    let muted = false;
 
 
-    // -------------------------------------
-    // Connect to ESP32
-    // -------------------------------------
+    // ==================================================
+    // Elements
+    // ==================================================
+
+    const statusElement =
+        document.getElementById(
+            "status"
+        );
+
+    const volumeDisplay =
+        document.getElementById(
+            "volumeDisplay"
+        );
+
+    const connectButton =
+        document.getElementById(
+            "connectButton"
+        );
+
+    const volumeUpButton =
+        document.getElementById(
+            "volumeUpButton"
+        );
+
+    const volumeDownButton =
+        document.getElementById(
+            "volumeDownButton"
+        );
+
+    const muteButton =
+        document.getElementById(
+            "muteButton"
+        );
+
+
+    // ==================================================
+    // Connect
+    // ==================================================
 
     async function connectBLE() {
 
-        const status =
-            document.getElementById("status");
-
-        const connectButton =
-            document.getElementById("connectButton");
-
-
-        // Check browser support
         if (!navigator.bluetooth) {
 
-            status.innerHTML =
-                "❌ Web Bluetooth not supported";
+            statusElement.innerHTML =
+                "❌ Bluetooth unsupported";
+
+            volumeDisplay.innerHTML =
+                "Use Android Chrome or a Web Bluetooth browser.";
 
             return;
         }
@@ -226,111 +331,124 @@
 
         try {
 
-            status.innerHTML =
+            statusElement.innerHTML =
                 "🟡 Searching...";
 
 
             // Open Bluetooth picker
             device =
-                await navigator.bluetooth.requestDevice({
+                await navigator.bluetooth
+                    .requestDevice({
 
-                    filters: [
-                        {
-                            services: [
-                                SERVICE_UUID
-                            ]
-                        }
-                    ]
+                        filters: [
 
-                });
+                            {
+                                name:
+                                    "Mic Controller"
+                            }
+
+                        ],
+
+                        optionalServices: [
+                            SERVICE_UUID
+                        ]
+
+                    });
 
 
-            // Listen for disconnect
             device.addEventListener(
                 "gattserverdisconnected",
                 handleDisconnect
             );
 
 
-            status.innerHTML =
+            statusElement.innerHTML =
                 "🟡 Connecting...";
 
 
-            // Connect to ESP32
-            const server =
+            server =
                 await device.gatt.connect();
 
 
-            // Get BLE service
             const service =
-                await server.getPrimaryService(
-                    SERVICE_UUID
-                );
+                await server
+                    .getPrimaryService(
+                        SERVICE_UUID
+                    );
 
 
-            // Get control characteristic
             controlCharacteristic =
-                await service.getCharacteristic(
-                    CONTROL_UUID
-                );
+                await service
+                    .getCharacteristic(
+                        CONTROL_UUID
+                    );
 
 
             // Connected
-            status.innerHTML =
+            statusElement.innerHTML =
                 "🟢 Connected";
 
 
-            connectButton.innerHTML =
-                "Connected";
+            volumeDisplay.innerHTML =
+                device.name ||
+                "Mic Controller";
 
+
+            connectButton.innerHTML =
+                "CONNECTED";
 
             connectButton.disabled =
                 true;
 
 
-            document.getElementById(
-                "onButton"
-            ).disabled = false;
-
-
-            document.getElementById(
-                "offButton"
-            ).disabled = false;
+            enableControls();
 
 
         }
 
-        catch(error) {
+        catch (error) {
 
-            console.error(error);
-
-
-            status.innerHTML =
-                "🔴 Connection Failed";
-
-
-            console.log(
-                error.name,
-                error.message
+            console.error(
+                error
             );
 
-        }
 
+            if (
+                error.name ===
+                "NotFoundError"
+            ) {
+
+                statusElement.innerHTML =
+                    "🔴 Connection cancelled";
+
+            }
+
+            else {
+
+                statusElement.innerHTML =
+                    "🔴 Connection failed";
+
+
+                volumeDisplay.innerHTML =
+                    error.message;
+
+            }
+        }
     }
 
 
-
-    // -------------------------------------
+    // ==================================================
     // Send BLE command
-    // -------------------------------------
+    // ==================================================
 
     async function sendCommand(command) {
 
-        if (!controlCharacteristic) {
+        if (
+            !controlCharacteristic
+        ) {
 
-            console.log(
-                "Not connected"
-            );
+            statusElement.innerHTML =
+                "🔴 Not connected";
 
             return;
         }
@@ -344,101 +462,236 @@
                 ]);
 
 
-            await controlCharacteristic
-                .writeValueWithResponse(
-                    data
-                );
+            // Prefer write without response
+            // because your ESP32 characteristic
+            // supports PROPERTY_WRITE_NR.
+
+            if (
+                typeof controlCharacteristic
+                    .writeValueWithoutResponse
+                === "function"
+            ) {
+
+                await controlCharacteristic
+                    .writeValueWithoutResponse(
+                        data
+                    );
+
+            }
+
+            else {
+
+                await controlCharacteristic
+                    .writeValue(
+                        data
+                    );
+
+            }
 
 
             console.log(
-                "Sent command:",
+                "Sent BLE command:",
                 command
             );
 
 
+            // Small visual feedback
+            if (command === 1) {
+
+                volumeDisplay.innerHTML =
+                    "Volume increased";
+
+            }
+
+            else if (
+                command === 2
+            ) {
+
+                volumeDisplay.innerHTML =
+                    "Volume decreased";
+
+            }
+
         }
 
-        catch(error) {
+        catch (error) {
 
             console.error(
                 "BLE write error:",
                 error
             );
 
-        }
 
+            statusElement.innerHTML =
+                "⚠️ Command failed";
+
+        }
     }
 
 
+    // ==================================================
+    // Mute
+    // ==================================================
 
-    // -------------------------------------
-    // Handle Bluetooth disconnect
-    // -------------------------------------
+    async function toggleMute() {
+
+        if (!muted) {
+
+            // Command 4 = force mute
+            await sendCommand(4);
+
+            muted = true;
+
+            muteButton.innerHTML =
+                "UNMUTE";
+
+            muteButton.classList.add(
+                "muted"
+            );
+
+            volumeDisplay.innerHTML =
+                "Muted";
+
+        }
+
+        else {
+
+            // Command 5 = force unmute
+            await sendCommand(5);
+
+            muted = false;
+
+            muteButton.innerHTML =
+                "MUTE";
+
+            muteButton.classList.remove(
+                "muted"
+            );
+
+            volumeDisplay.innerHTML =
+                "Audio active";
+
+        }
+    }
+
+
+    // ==================================================
+    // Disconnect
+    // ==================================================
 
     function handleDisconnect() {
 
         console.log(
-            "Bluetooth disconnected"
+            "BLE disconnected"
         );
 
+
+        server =
+            null;
 
         controlCharacteristic =
             null;
 
 
-        document.getElementById(
-            "status"
-        ).innerHTML =
+        statusElement.innerHTML =
             "🔴 Disconnected";
 
 
-        const connectButton =
-            document.getElementById(
-                "connectButton"
-            );
+        volumeDisplay.innerHTML =
+            "Press CONNECT";
 
 
         connectButton.innerHTML =
-            "Connect";
-
+            "CONNECT";
 
         connectButton.disabled =
             false;
 
 
-        document.getElementById(
-            "onButton"
-        ).disabled =
-            true;
+        disableControls();
 
 
-        document.getElementById(
-            "offButton"
-        ).disabled =
-            true;
+        muted = false;
 
+        muteButton.innerHTML =
+            "MUTE";
+
+        muteButton.classList.remove(
+            "muted"
+        );
     }
 
 
+    // ==================================================
+    // Enable controls
+    // ==================================================
 
-    // -------------------------------------
-    // Prevent browser scrolling/dragging
-    // -------------------------------------
+    function enableControls() {
+
+        volumeUpButton.disabled =
+            false;
+
+        volumeDownButton.disabled =
+            false;
+
+        muteButton.disabled =
+            false;
+    }
+
+
+    // ==================================================
+    // Disable controls
+    // ==================================================
+
+    function disableControls() {
+
+        volumeUpButton.disabled =
+            true;
+
+        volumeDownButton.disabled =
+            true;
+
+        muteButton.disabled =
+            true;
+    }
+
+
+    // ==================================================
+    // Prevent scrolling / dragging
+    // ==================================================
 
     document.addEventListener(
+
         "touchmove",
+
         function(event) {
 
             event.preventDefault();
 
         },
+
         {
             passive: false
         }
+
     );
 
+
+    // Prevent double-tap zoom behavior
+    document.addEventListener(
+
+        "dblclick",
+
+        function(event) {
+
+            event.preventDefault();
+
+        }
+
+    );
 
 </script>
 
 </body>
+
 </html>
